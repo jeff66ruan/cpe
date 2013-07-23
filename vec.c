@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
+// the kinds of routines/cases for testing
 #define CASE_NO_MIN CASE_NO_ONE
 #define CASE_NO_ONE   1
 #define CASE_NO_TWO   2
@@ -11,10 +12,46 @@
 #define CASE_NO_FOUR  4
 #define CASE_NO_FIVE  5
 #define CASE_NO_MAX CASE_NO_FIVE
+#define WARM_UP_MEASUREMENT {  \
+  START_COUNTER(t1_lo, t1_hi); \
+  STOP_COUNTER(t2_lo, t2_hi);  \
+  START_COUNTER(t1_lo, t1_hi); \
+  STOP_COUNTER(t2_lo, t2_hi);  \
+}
 
+//== types
+// a function pointer used to points to all kinds of
+// combine routines
+typedef  void (*combine_pf)(vec_ptr, data_t *);
+
+// sturcture to hold the combine routine's name
+// and pointer to the combine routine
+typedef struct routine {
+  char       *name;
+  combine_pf func;
+} routine_t;
+
+//== routine definitions
+static void combine1(vec_ptr v, data_t *dest);
+static void combine2(vec_ptr v, data_t *dest);
+static void combine3(vec_ptr v, data_t *dest);
+static void combine4(vec_ptr v, data_t *dest);
+static void combine5(vec_ptr v, data_t *dest);
+
+//== global variables
 uint64_t time1, time2;
 uint32_t t1_lo, t1_hi, t2_lo, t2_hi;
+// use an array to route commands to be executed
+// according to user selection
+routine_t routines[CASE_NO_MAX] = {
+  {"combine1", (combine_pf)combine1},
+  {"combine2", (combine_pf)combine2},
+  {"combine3", (combine_pf)combine3},
+  {"combine4", (combine_pf)combine4},
+  {"combine5", (combine_pf)combine5}
+};
 
+//== implementation
 
 //create vector of specified length
 vec_ptr new_vec(long int len)
@@ -64,11 +101,7 @@ void combine1(vec_ptr v, data_t *dest)
   long int i;
   *dest = IDENT;
 
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
-
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
+  WARM_UP_MEASUREMENT;
 
   START_COUNTER(t1_lo, t1_hi);
   for (i=0; i < vec_length(v); i++){
@@ -90,11 +123,7 @@ void combine2(vec_ptr v, data_t *dest)
 
   *dest = IDENT;
   
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
-
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
+  WARM_UP_MEASUREMENT;
 
   START_COUNTER(t1_lo, t1_hi);
   for (i=0; i < length; i++){
@@ -115,11 +144,7 @@ void combine3(vec_ptr v, data_t *dest)
 
   *dest = IDENT;
 
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
-
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
+  WARM_UP_MEASUREMENT;
 
   START_COUNTER(t1_lo, t1_hi);
   for (i = 0; i < length; i++) {
@@ -137,11 +162,7 @@ void combine4(vec_ptr v, data_t *dest)
   data_t *data = get_vec_start(v);
   data_t acc = IDENT;
 
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
-
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
+  WARM_UP_MEASUREMENT;
 
   START_COUNTER(t1_lo, t1_hi);
   for (i = 0; i < length; i++) {
@@ -163,11 +184,7 @@ void combine5(vec_ptr v, data_t *dest)
   data_t *data = get_vec_start(v);
   data_t acc = IDENT;
 
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
-
-  START_COUNTER(t1_lo, t1_hi);
-  STOP_COUNTER(t2_lo, t2_hi);
+  WARM_UP_MEASUREMENT;
 
   START_COUNTER(t1_lo, t1_hi);
 
@@ -221,6 +238,7 @@ static inline void evaluate(long int len, long int round, long int case_no)
 {
   int i;
   data_t result = 0;
+  
 
   vec_ptr vecp = new_vec(len);
   if (!vecp) {
@@ -228,44 +246,12 @@ static inline void evaluate(long int len, long int round, long int case_no)
     exit(EXIT_FAILURE);
   }
 
-  switch (case_no) {
-  case CASE_NO_ONE:
-    print_header("comibne1", len);
-    for (i = 0; i < round; i++) {
-      combine1(vecp, &result);
-      print_cycles();
-    }
-    break;
-  case CASE_NO_TWO:
-    print_header("combine2", len);
-    for (i = 0; i < round; i++) {
-      combine2(vecp, &result);
-      print_cycles();
-    }
-    break;
-  case CASE_NO_THREE:
-    print_header("combine3", len);
-    for (i = 0; i < round; i++) {
-      combine3(vecp, &result);
-      print_cycles();
-    }
-    break;
-  case CASE_NO_FOUR:
-    print_header("combine4", len);
-    for (i = 0; i < round; i++) {
-      combine4(vecp, &result);
-      print_cycles();
-    }
-    break;
-  case CASE_NO_FIVE:
-    print_header("combine5", len);
-    for (i = 0; i < round; i++) {
-      combine5(vecp, &result);
-      print_cycles();
-    }
-    break;
-  default:
-    printf("wrong case number\n");
+  char *name = routines[case_no - 1].name;
+  combine_pf func = routines[case_no - 1].func;
+  print_header(name, len);
+  for (i = 0; i < round; i++) {
+    (*func)(vecp, &result);
+    print_cycles();
   }
 }
 
