@@ -11,7 +11,11 @@
 #define CASE_NO_THREE 3
 #define CASE_NO_FOUR  4
 #define CASE_NO_FIVE  5
-#define CASE_NO_MAX CASE_NO_FIVE
+#define CASE_NO_SIX   6
+#define CASE_NO_SEVEN 7
+#define CASE_NO_MAX CASE_NO_SEVEN
+
+// need to test wheter the warm up helps
 #define WARM_UP_MEASUREMENT {  \
   START_COUNTER(t1_lo, t1_hi); \
   STOP_COUNTER(t2_lo, t2_hi);  \
@@ -37,6 +41,8 @@ static void combine2(vec_ptr v, data_t *dest);
 static void combine3(vec_ptr v, data_t *dest);
 static void combine4(vec_ptr v, data_t *dest);
 static void combine5(vec_ptr v, data_t *dest);
+static void combine6(vec_ptr v, data_t *dest);
+static void combine7(vec_ptr v, data_t *dest);
 
 //== global variables
 uint64_t time1, time2;
@@ -48,7 +54,9 @@ routine_t routines[CASE_NO_MAX] = {
   {"combine2", (combine_pf)combine2},
   {"combine3", (combine_pf)combine3},
   {"combine4", (combine_pf)combine4},
-  {"combine5", (combine_pf)combine5}
+  {"combine5", (combine_pf)combine5},
+  {"combine6", (combine_pf)combine6},
+  {"combine7", (combine_pf)combine7},
 };
 
 //== implementation
@@ -204,6 +212,63 @@ void combine5(vec_ptr v, data_t *dest)
   time2 = MAKE_TIME_FROM_COUNTERS(t2_lo, t2_hi);
 }
 
+//2-way unrolling & 2-way parallelism
+void combine6(vec_ptr v, data_t *dest)
+{
+  long int i;
+  long int length = vec_length(v);
+  long int limit = length-1;
+  data_t *data = get_vec_start(v);
+  data_t acc0 = IDENT, acc1 = IDENT;
+
+  WARM_UP_MEASUREMENT;
+
+  START_COUNTER(t1_lo, t1_hi);
+
+  // Combine 2 elements at a time 
+  for (i = 0; i < limit; i+=2) {
+    acc0 = acc0 OP data[i];
+    acc1 = acc1 OP data[i+1];
+  }
+  // Finish any remaining elements
+  for (; i < length; i++) {
+    acc0 = acc0 OP data[i];
+  }
+  *dest = acc0 OP acc1;
+
+  STOP_COUNTER(t2_lo, t2_hi);
+  time1 = MAKE_TIME_FROM_COUNTERS(t1_lo, t1_hi);
+  time2 = MAKE_TIME_FROM_COUNTERS(t2_lo, t2_hi);
+}
+
+// reassociation transformation
+void combine7(vec_ptr v, data_t *dest)
+{
+  long int i;
+  long int length = vec_length(v);
+  long int limit = length-1;
+  data_t *data = get_vec_start(v);
+  data_t acc = IDENT;
+
+  WARM_UP_MEASUREMENT;
+
+  START_COUNTER(t1_lo, t1_hi);
+
+  // Combine 2 elements at a time
+  for (i = 0; i < limit; i+=2) {
+    acc = acc OP (data[i] OP data[i+1]);
+  }
+
+  // Finish any remaining elements
+  for (; i < length; i++) {
+    acc = acc OP data[i];
+  }
+  *dest = acc;
+
+  STOP_COUNTER(t2_lo, t2_hi);
+  time1 = MAKE_TIME_FROM_COUNTERS(t1_lo, t1_hi);
+  time2 = MAKE_TIME_FROM_COUNTERS(t2_lo, t2_hi);
+}
 
 static inline void print_header(char *routine_name, long int len)
 {
@@ -228,9 +293,8 @@ static void usage(char *name)
          "             3 - comibne3\n"
          "             4 - comibne4\n"
          "             5 - comibne5\n"
-         "             1 - comibne1\n"
-         "             ?? - lower1\n"
-         "             ?? - lower2\n"
+         "             6 - comibne6\n"
+         "             7 - comibne7\n"
          , name);
 }
 
